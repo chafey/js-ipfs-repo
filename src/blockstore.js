@@ -5,7 +5,7 @@ const ShardingStore = core.ShardingDatastore
 const Block = require('ipfs-block')
 const CID = require('cids')
 const errcode = require('err-code')
-const { cidToKey } = require('./blockstore-utils')
+const { multihashToKey, keyToCidKey } = require('./blockstore-utils')
 
 module.exports = async (filestore, options) => {
   const store = await maybeWithSharding(filestore, options)
@@ -26,10 +26,15 @@ function createBaseStore (store) {
      * Query the store.
      *
      * @param {object} query
+     * @param {boolean} reconstructsCids - Defines if Keys are converted to a reconstructed CID using IPLD_RAW codec
      * @return {Iterable}
      */
-    async * query (query) {
+    async * query (query, reconstructsCids = false) {
       for await (const block of store.query(query)) {
+        if (reconstructsCids) {
+          block.key = keyToCidKey(block.key)
+        }
+
         yield block
       }
     },
@@ -43,27 +48,9 @@ function createBaseStore (store) {
       if (!CID.isCID(cid)) {
         throw errcode(new Error('Not a valid cid'), 'ERR_INVALID_CID')
       }
-      const key = cidToKey(cid)
-      let blockData
-      try {
-        blockData = await store.get(key)
-        return new Block(blockData, cid)
-      } catch (err) {
-        if (err.code === 'ERR_NOT_FOUND') {
-          const otherCid = cidToOtherVersion(cid)
-
-          if (!otherCid) {
-            throw err
-          }
-
-          const otherKey = cidToKey(otherCid)
-          const blockData = await store.get(otherKey)
-          await store.put(key, blockData)
-          return new Block(blockData, cid)
-        }
-
-        throw err
-      }
+      const key = multihashToKey(cid.multihash)
+      const blockData = await store.get(key)
+      return new Block(blockData, cid)
     },
     /**
      * Write a single block to the store.
@@ -76,7 +63,7 @@ function createBaseStore (store) {
         throw new Error('invalid block')
       }
 
-      const k = cidToKey(block.cid)
+      const k = multihashToKey(block.cid.multihash)
       const exists = await store.has(k)
       if (exists) return
       return store.put(k, block.data)
@@ -92,7 +79,7 @@ function createBaseStore (store) {
       const batch = store.batch()
 
       for await (const block of blocks) {
-        const key = cidToKey(block.cid)
+        const key = multihashToKey(block.cid.multihash)
 
         if (await store.has(key)) {
           continue
@@ -104,33 +91,38 @@ function createBaseStore (store) {
       return batch.commit()
     },
     /**
-     * Does the store contain block with this cid?
+     * Does the store contain block with this multihash or CID?
      *
-     * @param {CID} cid
-     * @returns {Promise<bool>}
+     * @param {CID|Buffer} obj
+     * @returns {Promise<boolean>}
      */
-    async has (cid) {
-      if (!CID.isCID(cid)) {
-        throw errcode(new Error('Not a valid cid'), 'ERR_INVALID_CID')
+    has (obj) {
+      if (CID.isCID(obj)) {
+        obj = obj.multihash
       }
 
-      const exists = await store.has(cidToKey(cid))
-      if (exists) return exists
-      const otherCid = cidToOtherVersion(cid)
-      if (!otherCid) return false
-      return store.has(cidToKey(otherCid))
+      if (!Buffer.isBuffer(obj)) {
+        throw errcode(new Error('Not a valid key'), 'ERR_INVALID_KEY')
+      }
+
+      return store.has(multihashToKey(obj))
     },
     /**
-     * Delete a block from the store
+     * Delete a CID or multihash from the store
      *
-     * @param {CID} cid
+     * @param {CID|Buffer} obj
      * @returns {Promise<void>}
      */
-    async delete (cid) { // eslint-disable-line require-await
-      if (!CID.isCID(cid)) {
-        throw errcode(new Error('Not a valid cid'), 'ERR_INVALID_CID')
+    async delete (obj) { // eslint-disable-line require-await
+      if (CID.isCID(obj)) {
+        obj = obj.multihash
       }
-      return store.delete(cidToKey(cid))
+
+      if (!Buffer.isBuffer(obj)) {
+        throw errcode(new Error('Not a valid key'), 'ERR_INVALID_KEY')
+      }
+
+      return store.delete(multihashToKey(obj))
     },
     /**
      * Close the store
@@ -140,13 +132,5 @@ function createBaseStore (store) {
     async close () { // eslint-disable-line require-await
       return store.close()
     }
-  }
-}
-
-function cidToOtherVersion (cid) {
-  try {
-    return cid.version === 0 ? cid.toV1() : cid.toV0()
-  } catch (err) {
-    return null
   }
 }

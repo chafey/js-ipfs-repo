@@ -11,8 +11,9 @@ const Repo = require('../src')
 module.exports = () => {
   describe('blockstore utils', () => {
     it('converts a CID to a datastore Key and back', () => {
-      const originalCid = new CID('Qme6KJdKcp85TYbLxuLV7oQzMiLremD7HMoXLZEmgo6Rnh')
-      const key = Repo.utils.blockstore.cidToKey(originalCid)
+      // CIDv1 in base32 with IPLD raw codec
+      const originalCid = new CID('bafkreihkb3vrxxex5zvzkr3s3a6noe223r7jka4ofjy2nkzu27kueg76ii')
+      const key = Repo.utils.blockstore.multihashToKey(originalCid.multihash)
       expect(key instanceof Key).to.be.true()
       const cid = Repo.utils.blockstore.keyToCid(key)
       expect(cid instanceof CID).to.be.true()

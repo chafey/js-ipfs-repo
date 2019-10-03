@@ -199,6 +199,25 @@ Get block.
 
 * `cid` is the content id of [type CID](https://github.com/ipld/js-cid#readme).
 
+#### `Promise<boolean> repo.blocks.has (obj)`
+
+Indicate if block is present
+
+* `obj` is either the content id of [type CID](https://github.com/ipld/js-cid#readme) or [multihash](https://github.com/multiformats/js-multihashing).
+
+#### `Promise<boolean> repo.blocks.delete (obj)`
+
+Deletes
+
+* `obj` is either the content id of [type CID](https://github.com/ipld/js-cid#readme) or [multihash](https://github.com/multiformats/js-multihashing).
+
+#### `Promise<Array<Object>> repo.blocks.query (query, reconstructsCids)`
+
+Query what blocks are available in blockstore.
+
+* `query` is a object as specified in [interface-datastore](https://github.com/ipfs/interface-datastore#query).
+* `reconstructsCids` a flag defining if the block's key is a reconstructed CID (eq. CIDv1 with RAW IPLD codec) or multihash
+
 Datastore:
 
 #### `repo.datastore`
